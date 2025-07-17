@@ -159,11 +159,10 @@ public class LevelCache {
     }
 
     public void loadPlayer(Player player) {
-        PlayerData playerData;
         String uuid = player.getUniqueId().toString();
 
         if (mySQL == null) {
-            playerData = new PlayerData(main, player);
+            PlayerData playerData = new PlayerData(main, player);
             File playerFile = new File(main.getDataFolder() + File.separator + "player_data", uuid + ".clv");
             try {
                 if (!playerFile.exists()) {
@@ -183,14 +182,38 @@ public class LevelCache {
                 e.printStackTrace();
                 main.logger("&cFailed to make file for " + player.getName() + ".");
             }
+            playerLevels.put(player, playerData);
         }
-        else playerData = mySQL.getPlayerData(player);
-        playerLevels.put(player, playerData);
+        else {
+            // Load MySQL data asynchronously to prevent server freezing
+            Bukkit.getScheduler().runTaskAsynchronously(main, () -> {
+                try {
+                    PlayerData playerData = mySQL.getPlayerData(player);
+                    // Switch back to main thread to update the map safely
+                    Bukkit.getScheduler().runTask(main, () -> {
+                        playerLevels.put(player, playerData);
+                    });
+                } catch (Exception e) {
+                    main.logger("&cFailed to load data for " + player.getName() + " from MySQL.");
+                    e.printStackTrace();
+                    // Fallback to default values on main thread
+                    Bukkit.getScheduler().runTask(main, () -> {
+                        PlayerData fallbackData = new PlayerData(main, player);
+                        playerLevels.put(player, fallbackData);
+                    });
+                }
+            });
+        }
     }
 
     public void savePlayer(Player player, boolean clearData) {
 
         PlayerData playerData = playerLevels.get(player);
+        if (playerData == null) {
+            main.logger("&cNo data to save for " + player.getName() + " - player data not loaded.");
+            return;
+        }
+        
         String uuid = player.getUniqueId().toString();
         if (mySQL == null) {
             try {
@@ -202,7 +225,22 @@ public class LevelCache {
                 main.logger("&cFailed to save data for " + player.getName() + ".");
             }
         }
-        else mySQL.updatePlayer(player);
+        else {
+            // Copy data to local variables for async operation
+            final long level = playerData.getLevel();
+            final double exp = playerData.getExp();
+            final long maxLevel = playerData.getMaxLevel();
+            
+            // Run MySQL operations asynchronously to prevent server freezing
+            Bukkit.getScheduler().runTaskAsynchronously(main, () -> {
+                try {
+                    mySQL.updatePlayer(player, level, exp, maxLevel);
+                } catch (Exception e) {
+                    main.logger("&cFailed to save data for " + player.getName() + " to MySQL.");
+                    e.printStackTrace();
+                }
+            });
+        }
         if (clearData) playerLevels.remove(player);
     }
 

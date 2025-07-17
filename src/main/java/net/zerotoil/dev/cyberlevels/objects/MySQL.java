@@ -49,7 +49,7 @@ public class MySQL {
     private void connect() {
         if (isConnected()) return;
         try {
-            connection = DriverManager.getConnection("jdbc:mysql://" + ip + ":" + port + "/" + database + "?autoReconnect=true&useSSL=" + ssl, username, password);
+            connection = DriverManager.getConnection("jdbc:mysql://" + ip + ":" + port + "/" + database + "?autoReconnect=true&useSSL=" + ssl + "&connectTimeout=5000&socketTimeout=10000", username, password);
             makeTable();
             addTable("MAX_LEVEL", "BIGINT(20)");
         } catch (Exception e) {
@@ -156,6 +156,33 @@ public class MySQL {
 
             statement = connection.prepareStatement("UPDATE " + table + " SET MAX_LEVEL=? WHERE UUID=?");
             statement.setString(1, main.levelCache().playerLevels().get(player).getMaxLevel() + "");
+            statement.setString(2, player.getUniqueId().toString());
+            statement.executeUpdate();
+
+        } catch (Exception e) {
+            main.logger("&cFailed to update player " + player.getName() + ".");
+            e.printStackTrace();
+        }
+    }
+
+    // overloaded method for async operations with pre-copied data
+    public void updatePlayer(Player player, long level, double exp, long maxLevel) {
+
+        if (!playerInTable(player)) addPlayer(player, true);
+
+        try {
+            PreparedStatement statement = connection.prepareStatement("UPDATE " + table + " SET LEVEL=? WHERE UUID=?");
+            statement.setString(1, level + "");
+            statement.setString(2, player.getUniqueId().toString());
+            statement.executeUpdate();
+
+            statement = connection.prepareStatement("UPDATE " + table + " SET EXP=? WHERE UUID=?");
+            statement.setString(1, main.levelUtils().roundDecimal(exp) + "");
+            statement.setString(2, player.getUniqueId().toString());
+            statement.executeUpdate();
+
+            statement = connection.prepareStatement("UPDATE " + table + " SET MAX_LEVEL=? WHERE UUID=?");
+            statement.setString(1, maxLevel + "");
             statement.setString(2, player.getUniqueId().toString());
             statement.executeUpdate();
 
