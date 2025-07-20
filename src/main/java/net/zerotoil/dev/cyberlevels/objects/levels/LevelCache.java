@@ -231,15 +231,25 @@ public class LevelCache {
             final double exp = playerData.getExp();
             final long maxLevel = playerData.getMaxLevel();
             
-            // Run MySQL operations asynchronously to prevent server freezing
-            Bukkit.getScheduler().runTaskAsynchronously(main, () -> {
+            // If plugin is being disabled, save synchronously to avoid scheduler errors
+            if (!main.isEnabled()) {
                 try {
                     mySQL.updatePlayer(player, level, exp, maxLevel);
                 } catch (Exception e) {
                     main.logger("&cFailed to save data for " + player.getName() + " to MySQL.");
                     e.printStackTrace();
                 }
-            });
+            } else {
+                // Run MySQL operations asynchronously to prevent server freezing
+                Bukkit.getScheduler().runTaskAsynchronously(main, () -> {
+                    try {
+                        mySQL.updatePlayer(player, level, exp, maxLevel);
+                    } catch (Exception e) {
+                        main.logger("&cFailed to save data for " + player.getName() + " to MySQL.");
+                        e.printStackTrace();
+                    }
+                });
+            }
         }
         if (clearData) playerLevels.remove(player);
     }
